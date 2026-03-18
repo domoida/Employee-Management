@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  server:
+    build: ./server
+    container_name: ems-server
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+
+  client:
+    build: ./client
+    container_name: ems-client
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped

@@ -1,12 +1,13 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.75);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
+  padding: 20px;
   animation: fadeIn 0.15s ease;
 }
 
@@ -19,6 +20,8 @@
   padding: 32px;
   width: 100%;
   max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 40px 100px rgba(0,0,0,0.6);
   animation: slideUp 0.2s ease;
 }
@@ -39,29 +42,36 @@
   font-size: 20px;
   font-weight: 700;
   color: var(--text);
+  line-height: 1.2;
 }
 
 .modal-close {
   background: none;
-  border: none;
-  color: var(--muted);
+  border: 1.5px solid var(--border);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: color 0.2s, background 0.2s;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
-.modal-close:hover { color: var(--text); background: var(--border); }
+.modal-close:hover { color: var(--text); background: var(--border); border-color: var(--muted); }
 
 .modal-error {
-  background: rgba(224,85,85,0.12);
-  border: 1px solid rgba(224,85,85,0.3);
-  color: #f87171;
+  background: rgba(224,85,85,0.15);
+  border: 1px solid rgba(224,85,85,0.35);
+  color: #fca5a5;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   font-size: 13px;
   margin-bottom: 20px;
   font-family: var(--font-mono);
+  line-height: 1.5;
 }
 
 .modal-grid {
@@ -78,16 +88,16 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
   font-family: var(--font-mono);
 }
 
 .modal-field input {
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -95,11 +105,12 @@
   border-radius: 8px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
+  display: block;
 }
 
 .modal-field input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(240,165,0,0.1);
+  box-shadow: 0 0 0 3px rgba(240,165,0,0.12);
 }
 
 .modal-field input::placeholder { color: var(--muted); }
@@ -108,12 +119,13 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .btn-cancel {
   background: none;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  border: 1.5px solid var(--border);
+  color: var(--text-secondary);
   padding: 10px 20px;
   border-radius: 8px;
   font-family: var(--font-main);
@@ -135,14 +147,15 @@
   font-weight: 700;
   cursor: pointer;
   transition: background 0.2s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-width: 130px;
-  justify-content: center;
+  min-height: 42px;
 }
-.btn-save:hover { background: #ffb930; }
-.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-save:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-save:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .spinner-sm {
   display: inline-block;
@@ -153,3 +166,10 @@
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .modal-grid { grid-template-columns: 1fr; }
+  .modal-field.full { grid-column: 1; }
+  .modal-box { padding: 24px 20px; }
+}
