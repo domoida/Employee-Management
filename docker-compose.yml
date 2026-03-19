@@ -1,22 +1,39 @@
-version: '3.8'
 
 services:
+
   server:
+
     build: ./server
+
     container_name: ems-server
+
     ports:
+
       - "5001:5001"
+
     environment:
+
       - PORT=5001
-      - MONGO_URI=${MONGO_URI}
-      - JWT_SECRET=${JWT_SECRET}
+
+      - MONGO_URI=mongodb+srv://domoida:domoida@cluster0.kymfbl2.mongodb.net/employee_db?appName=Cluster0
+
+      - JWT_SECRET=supersecretkey123!
+
     restart: unless-stopped
 
   client:
+
     build: ./client
+
     container_name: ems-client
+
     ports:
+
       - "5173:5173"
+
     depends_on:
+
       - server
+
     restart: unless-stopped
+
