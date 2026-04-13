@@ -20,7 +20,7 @@ export default function Dashboard() {
 
   const fetchEmployees = useCallback(async () => {
     try {
-      const { data } = await API.get('/employees');
+      const { data } = await API.get('/dynamic/employees');
       setEmployees(data);
     } catch {
       navigate('/login');
@@ -31,10 +31,10 @@ export default function Dashboard() {
 
   const handleSave = async (form) => {
     if (modal && modal._id) {
-      await API.put(`/employees/${modal._id}`, form);
+      await API.put(`/dynamic/employees/${modal._id}`, form);
       showToast('Employee updated.');
     } else {
-      await API.post('/employees', form);
+      await API.post('/dynamic/employees', form);
       showToast('Employee added.');
     }
     setModal(null);
@@ -42,7 +42,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = async () => {
-    await API.delete(`/employees/${deleteId}`);
+    await API.delete(`/dynamic/employees/${deleteId}`);
     setDeleteId(null);
     showToast('Employee removed.');
     fetchEmployees();
