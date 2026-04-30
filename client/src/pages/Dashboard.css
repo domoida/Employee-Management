@@ -466,3 +466,7 @@
   .search-input { width: 160px; }
   .dash-header { flex-direction: column; align-items: flex-start; }
 }
+
+.role-badge       { font-size: 0.7rem; padding: 2px 8px; border-radius: 99px; margin-bottom: 8px; display: inline-block; }
+.role-badge.admin { background: #3b82f6; color: #fff; }
+.role-badge.user  { background: #444; color: #aaa; }

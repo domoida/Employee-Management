@@ -4,22 +4,37 @@ import API from '../api';
 import './Auth.css';
 
 export default function Login() {
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [form,   setForm]   = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({});
+  const [error,  setError]  = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const navigate = useNavigate();
 
-  const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handle = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: '' });
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.email)    e.email    = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email.';
+    if (!form.password) e.password = 'Password is required.';
+    return e;
+  };
 
   const submit = async () => {
-    if (!form.email || !form.password) return setError('All fields required.');
+    const e = validate();
+    if (Object.keys(e).length) return setErrors(e);
     setLoading(true); setError('');
     try {
       const { data } = await API.post('/auth/login', form);
       localStorage.setItem('token', data.token);
+      localStorage.setItem('role',  data.role);
       navigate('/dashboard');
-    } catch {
-      setError('Invalid credentials. Please try again.');
+    } catch (err) {
+      setError(err.userMessage || 'Invalid credentials. Please try again.');
     } finally { setLoading(false); }
   };
 
@@ -42,24 +57,31 @@ export default function Login() {
             type="email" name="email" placeholder="you@company.com"
             value={form.email} onChange={handle}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
+            className={errors.email ? 'input-error' : ''}
           />
+          {errors.email && <span className="field-error">{errors.email}</span>}
         </div>
+
         <div className="auth-field">
           <label>Password</label>
-          <input
-            type="password" name="password" placeholder="••••••••"
-            value={form.password} onChange={handle}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
+          <div className="input-wrap">
+            <input
+              type={showPw ? 'text' : 'password'} name="password" placeholder="••••••••"
+              value={form.password} onChange={handle}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              className={errors.password ? 'input-error' : ''}
+            />
+            <button type="button" className="pw-toggle" onClick={() => setShowPw(p => !p)}>
+              {showPw ? '🙈' : '👁'}
+            </button>
+          </div>
+          {errors.password && <span className="field-error">{errors.password}</span>}
         </div>
 
         <button className="auth-btn" onClick={submit} disabled={loading}>
           {loading ? <span className="spinner" /> : 'Sign In'}
         </button>
-
-        <p className="auth-link">
-          No account? <Link to="/register">Create one</Link>
-        </p>
+        <p className="auth-link">No account? <Link to="/register">Create one</Link></p>
       </div>
     </div>
   );

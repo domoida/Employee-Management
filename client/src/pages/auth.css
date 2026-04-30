@@ -171,3 +171,9 @@
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.field-error  { color: #e05c2a; font-size: 0.75rem; margin-top: 4px; display: block; }
+.input-error  { border-color: #e05c2a !important; }
+.input-wrap   { position: relative; display: flex; align-items: center; }
+.input-wrap input { flex: 1; }
+.pw-toggle    { background: none; border: none; cursor: pointer; position: absolute; right: 10px; font-size: 1rem; }

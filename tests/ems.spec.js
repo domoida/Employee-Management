@@ -1,34 +1,43 @@
 const { test, expect } = require('@playwright/test');
-
 const BASE_URL = 'http://localhost:5173';
 const API_URL  = 'http://localhost:5001/api';
 
-let token = '';
-let createdId = '';
+let adminToken = '';
+let userToken  = '';
+let createdId  = '';
 
-// ── Helper: get auth token ───────────────────
-async function getToken() {
-  const res = await fetch(`${API_URL}/auth/login`, {
+async function getToken(email, password) {
+  const res  = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'test@ems.com', password: 'testpass123' })
+    body: JSON.stringify({ email, password })
   });
   const data = await res.json();
-  return data.token;
+  return data.data?.token;
 }
 
-// ── Setup: register test user once ──────────
 test.beforeAll(async () => {
+  // Register UI test user (regular)
   await fetch(`${API_URL}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'test@ems.com', password: 'testpass123' })
   });
-  token = await getToken();
+  // Register admin user
+  await fetch(`${API_URL}/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'admin@ems.com', password: 'adminpass123', role: 'admin' })
+  });
+  // Register regular user
+  await fetch(`${API_URL}/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'user@ems.com', password: 'userpass123', role: 'user' })
+  });
+
+  adminToken = await getToken('admin@ems.com', 'adminpass123');
+  userToken  = await getToken('user@ems.com',  'userpass123');
 });
 
 // ── UI Tests ─────────────────────────────────
-
 test('Login page loads correctly', async ({ page }) => {
   await page.goto(`${BASE_URL}/login`);
   await expect(page.locator('h1')).toContainText('Welcome back');
@@ -62,111 +71,130 @@ test('Login with invalid credentials shows error', async ({ page }) => {
   await expect(page.locator('.auth-error')).toBeVisible();
 });
 
-// ── API CRUD Tests ───────────────────────────
+// ── Structured Response Tests ─────────────────
+test('Response envelope has status and message fields', async () => {
+  const res  = await fetch(`${API_URL}/dynamic/employees`, { headers: { 'x-auth-token': adminToken } });
+  const data = await res.json();
+  expect(typeof data.status).toBe('boolean');
+  expect(typeof data.message).toBe('string');
+  expect(data.data).toBeDefined();
+});
 
+// ── API CRUD Tests (admin) ────────────────────
 test('CREATE employee via API', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees`, {
+  const res  = await fetch(`${API_URL}/dynamic/employees`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-    body: JSON.stringify({
-      firstName: 'Test', lastName: 'User',
-      email: `test${Date.now()}@company.com`,
-      position: 'QA Engineer', department: 'Engineering'
-    })
+    headers: { 'Content-Type': 'application/json', 'x-auth-token': adminToken },
+    body: JSON.stringify({ firstName: 'Test', lastName: 'User', email: `test${Date.now()}@company.com`, position: 'QA Engineer', department: 'Engineering' })
   });
   const data = await res.json();
   expect(res.status).toBe(201);
-  expect(data._id).toBeDefined();
-  expect(data.firstName).toBe('Test');
-  createdId = data._id;
+  expect(data.status).toBe(true);
+  expect(data.data._id).toBeDefined();
+  expect(data.data.firstName).toBe('Test');
+  createdId = data.data._id;
 });
 
 test('READ all employees via API', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees`, {
-    headers: { 'x-auth-token': token }
-  });
+  const res  = await fetch(`${API_URL}/dynamic/employees`, { headers: { 'x-auth-token': adminToken } });
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(Array.isArray(data)).toBe(true);
+  expect(data.status).toBe(true);
+  expect(Array.isArray(data.data)).toBe(true);
+  expect(data.meta).toBeDefined();
 });
 
 test('UPDATE employee via API', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees/${createdId}`, {
+  const res  = await fetch(`${API_URL}/dynamic/employees/${createdId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-    body: JSON.stringify({
-      firstName: 'Updated', lastName: 'User',
-      email: `updated${Date.now()}@company.com`,
-      position: 'Senior QA', department: 'Engineering'
-    })
+    headers: { 'Content-Type': 'application/json', 'x-auth-token': adminToken },
+    body: JSON.stringify({ firstName: 'Updated', lastName: 'User', email: `updated${Date.now()}@company.com`, position: 'Senior QA', department: 'Engineering' })
   });
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(data.firstName).toBe('Updated');
+  expect(data.data.firstName).toBe('Updated');
 });
 
 test('DELETE (soft) employee via API', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees/${createdId}`, {
-    method: 'DELETE',
-    headers: { 'x-auth-token': token }
+  const res  = await fetch(`${API_URL}/dynamic/employees/${createdId}`, {
+    method: 'DELETE', headers: { 'x-auth-token': adminToken }
   });
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(data.record.deletedAt).not.toBeNull();
+  expect(data.data.deletedAt).not.toBeNull();
 });
 
 test('Deleted employee not in active list', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees`, {
-    headers: { 'x-auth-token': token }
-  });
+  const res  = await fetch(`${API_URL}/dynamic/employees`, { headers: { 'x-auth-token': adminToken } });
   const data = await res.json();
-  const found = data.find(e => e._id === createdId);
+  const found = data.data.find(e => e._id === createdId);
   expect(found).toBeUndefined();
 });
 
 test('RESTORE soft-deleted employee via API', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees/${createdId}/restore`, {
-    method: 'PATCH',
-    headers: { 'x-auth-token': token }
+  const res  = await fetch(`${API_URL}/dynamic/employees/${createdId}/restore`, {
+    method: 'PATCH', headers: { 'x-auth-token': adminToken }
   });
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(data.deletedAt).toBeNull();
+  expect(data.data.deletedAt).toBeNull();
 });
 
 test('Validation rejects missing required fields', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees`, {
+  const res  = await fetch(`${API_URL}/dynamic/employees`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+    headers: { 'Content-Type': 'application/json', 'x-auth-token': adminToken },
     body: JSON.stringify({ firstName: 'Only' })
   });
   const data = await res.json();
   expect(res.status).toBe(400);
-  expect(data.errors).toBeDefined();
+  expect(data.status).toBe(false);
+  expect(data.error).toBeDefined();
 });
 
 test('Validation rejects invalid email', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees`, {
+  const res  = await fetch(`${API_URL}/dynamic/employees`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-    body: JSON.stringify({
-      firstName: 'Test', lastName: 'User',
-      email: 'not-an-email',
-      position: 'Dev', department: 'IT'
-    })
+    headers: { 'Content-Type': 'application/json', 'x-auth-token': adminToken },
+    body: JSON.stringify({ firstName: 'Test', lastName: 'User', email: 'not-an-email', position: 'Dev', department: 'IT' })
   });
   const data = await res.json();
   expect(res.status).toBe(400);
-  expect(data.errors.some(e => e.includes('email'))).toBe(true);
+  expect(data.error.some(e => e.includes('email'))).toBe(true);
 });
 
 test('Audit log created after actions', async () => {
-  const res = await fetch(`${API_URL}/dynamic/employees/${createdId}/audit`, {
-    headers: { 'x-auth-token': token }
-  });
+  const res  = await fetch(`${API_URL}/dynamic/employees/${createdId}/audit`, { headers: { 'x-auth-token': adminToken } });
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(Array.isArray(data)).toBe(true);
-  expect(data.length).toBeGreaterThan(0);
-  expect(['CREATE','UPDATE','DELETE','RESTORE']).toContain(data[0].action);
+  expect(Array.isArray(data.data)).toBe(true);
+  expect(data.data.length).toBeGreaterThan(0);
+  expect(['CREATE','UPDATE','DELETE','RESTORE']).toContain(data.data[0].action);
+});
+
+// ── RBAC Tests ────────────────────────────────
+test('Regular user can READ employees', async () => {
+  const res = await fetch(`${API_URL}/dynamic/employees`, { headers: { 'x-auth-token': userToken } });
+  expect(res.status).toBe(200);
+});
+
+test('Regular user cannot CREATE employee', async () => {
+  const res = await fetch(`${API_URL}/dynamic/employees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-auth-token': userToken },
+    body: JSON.stringify({ firstName: 'Test', lastName: 'User', email: 'rbac@test.com', position: 'Dev', department: 'IT' })
+  });
+  expect(res.status).toBe(403);
+});
+
+test('Regular user cannot DELETE employee', async () => {
+  const res = await fetch(`${API_URL}/dynamic/employees/${createdId}`, {
+    method: 'DELETE', headers: { 'x-auth-token': userToken }
+  });
+  expect(res.status).toBe(403);
+});
+
+test('Unauthenticated request is rejected', async () => {
+  const res = await fetch(`${API_URL}/dynamic/employees`);
+  expect(res.status).toBe(401);
 });
