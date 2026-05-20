@@ -4,6 +4,7 @@ const { models, modelDefinitions } = require('../models');
 const AuditLog   = require('../models/AuditLog');
 const validate   = require('../middleware/validate');
 const { auth, requireRole } = require('../middleware/auth');
+const { loadHooks } = require('../hooks');
 
 const getUserId = (req) => req.user?.id || 'system';
 
@@ -15,17 +16,26 @@ for (const modelName of Object.keys(models)) {
   const Model = models[modelName];
   const base  = `/${modelName.toLowerCase()}s`;
 
-  // GET all — paginated, soft-delete filtered
+  // GET all — beforeRead / afterRead hooks
   router.get(base, auth, async (req, res) => {
     try {
+      const hooks = loadHooks(modelName);
       const page  = Math.max(1, parseInt(req.query.page)  || 1);
       const limit = Math.min(100, parseInt(req.query.limit) || 50);
       const skip  = (page - 1) * limit;
+
+      const query = await hooks.beforeRead({ page, limit, skip });
+      console.log(`[HOOKS] beforeRead complete for ${modelName}`);
+
       const [records, total] = await Promise.all([
-        Model.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+        Model.find().sort({ createdAt: -1 }).skip(query.skip).limit(query.limit),
         Model.countDocuments()
       ]);
-      res.json({ status: true, message: 'Records retrieved', data: records, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+
+      const processed = await hooks.afterRead(records);
+      console.log(`[HOOKS] afterRead complete for ${modelName}`);
+
+      res.json({ status: true, message: 'Records retrieved', data: processed, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (err) {
       res.status(500).json({ status: false, message: 'Failed to fetch records', error: err.message });
     }
@@ -34,9 +44,17 @@ for (const modelName of Object.keys(models)) {
   // GET single
   router.get(`${base}/:id`, auth, async (req, res) => {
     try {
-      const record = await Model.findById(req.params.id);
+      const hooks  = loadHooks(modelName);
+      const query  = await hooks.beforeRead({ id: req.params.id });
+      console.log(`[HOOKS] beforeRead complete for ${modelName} id: ${query.id}`);
+
+      const record = await Model.findById(query.id);
       if (!record) return res.status(404).json({ status: false, message: 'Not found', error: 'Record does not exist' });
-      res.json({ status: true, message: 'Record retrieved', data: record });
+
+      const processed = await hooks.afterRead(record);
+      console.log(`[HOOKS] afterRead complete for ${modelName}`);
+
+      res.json({ status: true, message: 'Record retrieved', data: processed });
     } catch (err) {
       res.status(500).json({ status: false, message: 'Failed to fetch record', error: err.message });
     }
@@ -52,46 +70,74 @@ for (const modelName of Object.keys(models)) {
     }
   });
 
-  // POST create — admin only
+  // POST create — beforeCreate / afterCreate hooks
   router.post(base, auth, requireRole('admin'), validate(modelName), async (req, res) => {
     try {
-      const userId = getUserId(req);
-      const record = await new Model({ ...req.body, createdBy: userId, updatedBy: userId }).save();
-      await AuditLog.create({ model: modelName, recordId: record._id, action: 'CREATE', performedBy: userId, changes: req.body });
-      res.status(201).json({ status: true, message: `${modelName} created successfully`, data: record });
+      const hooks   = loadHooks(modelName);
+      const userId  = getUserId(req);
+
+      const processed = await hooks.beforeCreate(req.body);
+      console.log(`[HOOKS] beforeCreate complete for ${modelName}`);
+
+      const record = await new Model({ ...processed, createdBy: userId, updatedBy: userId }).save();
+      await AuditLog.create({ model: modelName, recordId: record._id, action: 'CREATE', performedBy: userId, changes: processed });
+
+      const result = await hooks.afterCreate(record.toObject());
+      console.log(`[HOOKS] afterCreate complete for ${modelName}`);
+
+      res.status(201).json({ status: true, message: `${modelName} created successfully`, data: result });
     } catch (err) {
       res.status(400).json({ status: false, message: 'Failed to create record', error: err.message });
     }
   });
 
-  // PUT update — admin only
+  // PUT update — beforeUpdate / afterUpdate hooks
   router.put(`${base}/:id`, auth, requireRole('admin'), validate(modelName), async (req, res) => {
     try {
+      const hooks  = loadHooks(modelName);
       const userId = getUserId(req);
+
       const before = await Model.findById(req.params.id);
       if (!before) return res.status(404).json({ status: false, message: 'Not found', error: 'Record does not exist' });
-      const record = await Model.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: userId }, { new: true });
-      await AuditLog.create({ model: modelName, recordId: req.params.id, action: 'UPDATE', performedBy: userId, changes: req.body });
-      res.json({ status: true, message: `${modelName} updated successfully`, data: record });
+
+      const processed = await hooks.beforeUpdate(req.body);
+      console.log(`[HOOKS] beforeUpdate complete for ${modelName}`);
+
+      const record = await Model.findByIdAndUpdate(req.params.id, { ...processed, updatedBy: userId }, { new: true });
+      await AuditLog.create({ model: modelName, recordId: req.params.id, action: 'UPDATE', performedBy: userId, changes: processed });
+
+      const result = await hooks.afterUpdate(record.toObject());
+      console.log(`[HOOKS] afterUpdate complete for ${modelName}`);
+
+      res.json({ status: true, message: `${modelName} updated successfully`, data: result });
     } catch (err) {
       res.status(400).json({ status: false, message: 'Failed to update record', error: err.message });
     }
   });
 
-  // DELETE soft delete — admin only
+  // DELETE soft delete — beforeDelete / afterDelete hooks
   router.delete(`${base}/:id`, auth, requireRole('admin'), async (req, res) => {
     try {
+      const hooks  = loadHooks(modelName);
       const userId = getUserId(req);
-      const record = await Model.findByIdAndUpdate(req.params.id, { deletedAt: new Date(), updatedBy: userId }, { new: true });
+
+      const input = await hooks.beforeDelete({ id: req.params.id, userId });
+      console.log(`[HOOKS] beforeDelete complete for ${modelName}`);
+
+      const record = await Model.findByIdAndUpdate(input.id, { deletedAt: new Date(), updatedBy: userId }, { new: true });
       if (!record) return res.status(404).json({ status: false, message: 'Not found', error: 'Record does not exist' });
       await AuditLog.create({ model: modelName, recordId: req.params.id, action: 'DELETE', performedBy: userId });
-      res.json({ status: true, message: `${modelName} deleted successfully`, data: record });
+
+      const result = await hooks.afterDelete(record.toObject());
+      console.log(`[HOOKS] afterDelete complete for ${modelName}`);
+
+      res.json({ status: true, message: `${modelName} deleted successfully`, data: result });
     } catch (err) {
       res.status(500).json({ status: false, message: 'Failed to delete record', error: err.message });
     }
   });
 
-  // PATCH restore — admin only
+  // PATCH restore
   router.patch(`${base}/:id/restore`, auth, requireRole('admin'), async (req, res) => {
     try {
       const userId = getUserId(req);

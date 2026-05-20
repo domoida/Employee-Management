@@ -16,7 +16,10 @@ app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', cre
 app.use(express.json());
 app.use(logger);
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (process.env.SWAGGER_ENABLED === 'true') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  console.log('Swagger docs available at /api/docs');
+}
 
 app.use('/api/auth', authLimiter);
 app.use('/api',      apiLimiter);
